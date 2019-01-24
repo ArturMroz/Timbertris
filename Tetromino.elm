@@ -67,6 +67,101 @@ j =
     }
 
 
+l : Tetromino
+l =
+    { shape =
+        [ ( 1, 0 )
+        , ( 0, 0 )
+        , ( -1, 0 )
+        , ( -1, 1 )
+        ]
+    , block = Block Color.orange
+    , pivot = { r = 0.0, c = 0.0 }
+    , rows = 3
+    , cols = 2
+    }
+
+
+z : Tetromino
+z =
+    { shape =
+        [ ( 1, -1 )
+        , ( 1, 0 )
+        , ( 0, 0 )
+        , ( 0, 1 )
+        ]
+    , block = Block Color.red
+    , pivot = { r = 0.0, c = 0.0 }
+    , rows = 2
+    , cols = 3
+    }
+
+
+s : Tetromino
+s =
+    { shape =
+        [ ( -1, -1 )
+        , ( -1, 0 )
+        , ( 0, 0 )
+        , ( 0, 1 )
+        ]
+    , block = Block Color.green
+    , pivot = { r = 0.0, c = 0.0 }
+    , rows = 2
+    , cols = 3
+    }
+
+
+t : Tetromino
+t =
+    { shape =
+        [ ( 0, -1 )
+        , ( 0, 0 )
+        , ( 0, 1 )
+        , ( -1, 0 )
+        ]
+    , block = Block Color.purple
+    , pivot = { r = 0.0, c = 0.0 }
+    , rows = 2
+    , cols = 3
+    }
+
+
+o : Tetromino
+o =
+    { shape =
+        [ ( 0, 0 )
+        , ( 0, 1 )
+        , ( -1, 1 )
+        , ( -1, 0 )
+        ]
+    , block = Block Color.yellow
+    , pivot = { r = -0.5, c = 0.5 }
+    , rows = 2
+    , cols = 3
+    }
+
+
+shift : ( Int, Int ) -> Tetromino -> Tetromino
+shift ( rows, cols ) tetromino =
+    let
+        shiftHelper ( row, col ) =
+            ( row + rows, col + cols )
+
+        newShape =
+            List.map shiftHelper tetromino.shape
+
+        pivot_ =
+            { r = tetromino.pivot.r + toFloat rows
+            , c = tetromino.pivot.c + toFloat cols
+            }
+    in
+    { tetromino
+        | shape = newShape
+        , pivot = pivot_
+    }
+
+
 drawPivot : Tetromino -> Form
 drawPivot { pivot } =
     let
@@ -117,7 +212,7 @@ rotate tetromino =
 
 
 tetromino =
-    j |> rotate |> rotate
+    o |> rotate |> rotate |> shift ( 1, 4 )
 
 
 main : Html msg

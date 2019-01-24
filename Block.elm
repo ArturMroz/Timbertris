@@ -28,9 +28,9 @@ toForm block =
     group [ filled block.color shape, border ]
 
 
-el : Html msg
-el =
-    show 42 |> Element.toHtml
+-- el : Html msg
+-- el =
+--     show 42 |> Element.toHtml
 
 
 main : Html msg
