@@ -1,18 +1,31 @@
 module Main exposing (main)
 
+import Array exposing (Array)
 import Browser
 import Html exposing (Attribute, Html, button, div, input, text)
 import Html.Attributes
 import Html.Events exposing (onClick, onInput)
+import Random
 import Svg exposing (..)
 import Svg.Attributes exposing (..)
+import Task
+import Time
 
 
 main =
-    Browser.sandbox { init = init, update = update, view = view }
+    Browser.element
+        { init = init
+        , update = update
+        , subscriptions = subscriptions
+        , view = view
+        }
 
 
-type alias Pallette =
+
+-- MODEL
+
+
+type alias Palette =
     { red : String
     , orange : String
     , yellow : String
@@ -25,7 +38,7 @@ type alias Pallette =
     }
 
 
-nord : Pallette
+nord : Palette
 nord =
     { red = "#bf616a"
     , orange = "#d08770"
@@ -34,39 +47,50 @@ nord =
     , purple = "#b48ead"
     , lightblue = "#88c0d0"
     , blue = "#5e81ac"
-    , darkgray = "#3b4252"
 
-    -- , darkgray = "#2e3440"
+    -- , darkgray = "#3b4252"
+    , darkgray = "#2e3440"
     , lightgray = "#d8dee9"
     }
 
 
-pallete =
+palette : Palette
+palette =
     nord
 
 
 size_ : Int
 size_ =
-    35
+    30
 
 
 size =
     String.fromInt size_
 
 
-board children =
+boardWidth =
+    String.fromInt <| (size_ * 10)
+
+
+boardHeight =
+    String.fromInt <| (size_ * 20)
+
+
+board : Model -> Svg Msg
+board model =
     svg
-        [ width <| String.fromInt <| (size_ * 10)
-        , height <| String.fromInt <| (size_ * 20)
+        [ width boardWidth
+        , height boardHeight
         ]
         ([ rect
-            [ width <| String.fromInt <| (size_ * 10)
-            , height <| String.fromInt <| (size_ * 20)
-            , fill pallete.darkgray
+            [ width boardWidth
+            , height boardHeight
+            , fill palette.darkgray
             ]
             []
          ]
-            ++ children
+            ++ (model.active |> toForm)
+            ++ (model.pile |> List.map toForm |> List.concat)
         )
 
 
@@ -83,6 +107,131 @@ type alias Tetromino =
     }
 
 
+z : Tetromino
+z =
+    { shape =
+        [ ( 1, -1 )
+        , ( 1, 0 )
+        , ( 0, 0 )
+        , ( 0, 1 )
+        ]
+    , color = palette.red
+    , pivot = { r = 0.0, c = 0.0 }
+    , rows = 2
+    , cols = 3
+    }
+
+
+s : Tetromino
+s =
+    { shape =
+        [ ( -1, -1 )
+        , ( -1, 0 )
+        , ( 0, 0 )
+        , ( 0, 1 )
+        ]
+    , color = palette.lightblue
+    , pivot = { r = 0.0, c = 0.0 }
+    , rows = 2
+    , cols = 3
+    }
+
+
+t : Tetromino
+t =
+    { shape =
+        [ ( 0, -1 )
+        , ( 0, 0 )
+        , ( 0, 1 )
+        , ( -1, 0 )
+        ]
+    , color = palette.purple
+    , pivot = { r = 0.0, c = 0.0 }
+    , rows = 2
+    , cols = 3
+    }
+
+
+i : Tetromino
+i =
+    { shape =
+        [ ( 1, 0 )
+        , ( 0, 0 )
+        , ( -1, 0 )
+        , ( -2, 0 )
+        ]
+    , color = palette.green
+    , pivot = { r = -0.5, c = 0.5 }
+    , rows = 4
+    , cols = 1
+    }
+
+
+l : Tetromino
+l =
+    { shape =
+        [ ( 1, 0 )
+        , ( 0, 0 )
+        , ( -1, 0 )
+        , ( -1, 1 )
+        ]
+    , color = palette.blue
+    , pivot = { r = 0.0, c = 0.0 }
+    , rows = 3
+    , cols = 2
+    }
+
+
+j : Tetromino
+j =
+    { shape =
+        [ ( 1, 0 )
+        , ( 0, 0 )
+        , ( -1, 0 )
+        , ( -1, -1 )
+        ]
+    , color = palette.orange
+    , pivot = { r = 0.0, c = 0.0 }
+    , rows = 3
+    , cols = 2
+    }
+
+
+o : Tetromino
+o =
+    { shape =
+        [ ( 0, 0 )
+        , ( 0, 1 )
+        , ( -1, 1 )
+        , ( -1, 0 )
+        ]
+    , color = palette.yellow
+    , pivot = { r = -0.5, c = 0.5 }
+    , rows = 2
+    , cols = 3
+    }
+
+
+allTetrominos : Array Tetromino
+allTetrominos =
+    Array.fromList [ i, j, l, s, z, o, t ]
+
+
+type alias Model =
+    { active : Tetromino
+    , pile : List Tetromino
+    }
+
+
+init : () -> ( Model, Cmd Msg )
+init _ =
+    ( { active = z |> shift ( 0, -10 )
+      , pile = []
+      }
+    , cmdRandomNewTetromino
+    )
+
+
 toForm : Tetromino -> List (Svg msg)
 toForm { shape, color } =
     let
@@ -90,7 +239,7 @@ toForm { shape, color } =
             [ width size, height size, fill color ]
 
         pos location =
-            String.fromInt ((location + 1) * size_)
+            String.fromInt (location * size_)
 
         translate ( x_, y_ ) =
             rect (basicB ++ [ x (pos x_), y (pos y_) ]) []
@@ -141,151 +290,115 @@ rotate tetromino =
 shift : Pos -> Tetromino -> Tetromino
 shift ( row, col ) tetromino =
     let
+        shiftHelperPivot { r, c } =
+            { r = r + toFloat row, c = c + toFloat col }
+
         shiftHelper ( x, y ) =
             ( x + row, y + col )
 
-        newShape =
+        shape_ =
             List.map shiftHelper tetromino.shape
+
+        pivot_ =
+            shiftHelperPivot tetromino.pivot
     in
-    { tetromino | shape = newShape }
+    { tetromino | shape = shape_, pivot = pivot_ }
 
 
-z : Tetromino
-z =
-    { shape =
-        [ ( 1, -1 )
-        , ( 1, 0 )
-        , ( 0, 0 )
-        , ( 0, 1 )
-        ]
-    , color = nord.red
-    , pivot = { r = 0.0, c = 0.0 }
-    , rows = 2
-    , cols = 3
-    }
 
-
-s : Tetromino
-s =
-    { shape =
-        [ ( -1, -1 )
-        , ( -1, 0 )
-        , ( 0, 0 )
-        , ( 0, 1 )
-        ]
-    , color = nord.lightblue
-    , pivot = { r = 0.0, c = 0.0 }
-    , rows = 2
-    , cols = 3
-    }
-
-
-t : Tetromino
-t =
-    { shape =
-        [ ( 0, -1 )
-        , ( 0, 0 )
-        , ( 0, 1 )
-        , ( -1, 0 )
-        ]
-    , color = pallete.purple
-    , pivot = { r = 0.0, c = 0.0 }
-    , rows = 2
-    , cols = 3
-    }
-
-
-i : Tetromino
-i =
-    { shape =
-        [ ( 1, 0 )
-        , ( 0, 0 )
-        , ( -1, 0 )
-        , ( -2, 0 )
-        ]
-    , color = nord.green
-    , pivot = { r = -0.5, c = 0.5 }
-    , rows = 4
-    , cols = 1
-    }
-
-
-l : Tetromino
-l =
-    { shape =
-        [ ( 1, 0 )
-        , ( 0, 0 )
-        , ( -1, 0 )
-        , ( -1, 1 )
-        ]
-    , color = nord.blue
-    , pivot = { r = 0.0, c = 0.0 }
-    , rows = 3
-    , cols = 2
-    }
-
-
-j : Tetromino
-j =
-    { shape =
-        [ ( 1, 0 )
-        , ( 0, 0 )
-        , ( -1, 0 )
-        , ( -1, -1 )
-        ]
-    , color = pallete.orange
-    , pivot = { r = 0.0, c = 0.0 }
-    , rows = 3
-    , cols = 2
-    }
-
-
-o : Tetromino
-o =
-    { shape =
-        [ ( 0, 0 )
-        , ( 0, 1 )
-        , ( -1, 1 )
-        , ( -1, 0 )
-        ]
-    , color = pallete.yellow
-    , pivot = { r = -0.5, c = 0.5 }
-    , rows = 2
-    , cols = 3
-    }
-
-
-type alias Model =
-    { content : String }
-
-
-init : Model
-init =
-    { content = "44" }
+-- UPDATE
 
 
 type Msg
     = Rotate
     | Shift ( Int, Int )
+    | MsgNewTetromino Int
+    | GetNewTetromino
+    | Tick Time.Posix
 
 
-update : Msg -> Model -> Model
+cmdRandomNewTetromino : Cmd Msg
+cmdRandomNewTetromino =
+    Random.generate (\ind -> MsgNewTetromino ind) (Random.int 0 6)
+
+
+update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Shift ( x, y ) ->
-            { model | content = " change" }
+            ( { model | active = shift ( x, y ) model.active }, Cmd.none )
 
         Rotate ->
-            { model | content = " change" }
+            ( { model | active = rotate model.active }, Cmd.none )
+
+        GetNewTetromino ->
+            ( model
+            , Random.generate MsgNewTetromino (Random.int 0 6)
+            )
+
+        Tick newTime ->
+            let
+                newOne =
+                    model.active |> shift ( 0, 1 )
+
+                lowestPoint =
+                    newOne.shape |> List.map Tuple.second |> List.maximum
+            in
+            case lowestPoint of
+                Just y ->
+                    if y > 19 then
+                        ( model
+                        , Random.generate MsgNewTetromino (Random.int 0 6)
+                        )
+
+                    else
+                        ( { model | active = newOne }
+                        , Cmd.none
+                        )
+
+                Nothing ->
+                    ( { model | active = newOne }
+                    , Cmd.none
+                    )
+
+        MsgNewTetromino ind ->
+            let
+                newTetromino =
+                    Array.get ind allTetrominos
+                        |> Maybe.map (shift ( 4, 0 ))
+                        |> Maybe.withDefault z
+            in
+            ( { model
+                | pile = model.active :: model.pile
+                , active = newTetromino
+              }
+            , Cmd.none
+            )
 
 
+
+-- SUBSCRIPTIONS
+
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    Time.every 1000 Tick
+
+
+
+-- VIEW
+
+
+view : Model -> Html Msg
 view model =
     div []
-        [ board (z |> rotate |> shift ( 4, 6 ) |> toForm)
+        [ board model
         , div []
-            [ button [ onClick (Shift ( -1, 0 )) ] [ Html.text "Left" ]
-            , button [ onClick (Shift ( 1, 0 )) ] [ Html.text "Right" ]
-            , button [ onClick (Shift ( 0, -1 )) ] [ Html.text "Down" ]
-            , button [ onClick Rotate ] [ Html.text "Rotate" ]
+            [ button [ onClick (Shift ( 0, -1 )) ] [ Html.text "up" ]
+            , button [ onClick (Shift ( -1, 0 )) ] [ Html.text "left" ]
+            , button [ onClick (Shift ( 1, 0 )) ] [ Html.text "right" ]
+            , button [ onClick (Shift ( 0, 1 )) ] [ Html.text "down" ]
+            , button [ onClick Rotate ] [ Html.text "rotate" ]
+            , button [ onClick GetNewTetromino ] [ Html.text "new" ]
             ]
         ]
