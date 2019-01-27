@@ -2,14 +2,21 @@ module Main exposing (main)
 
 import Array exposing (Array)
 import Browser
+import Browser.Events exposing (onAnimationFrameDelta, onKeyDown, onKeyUp, onResize)
 import Html exposing (Attribute, Html, button, div, input, text)
 import Html.Attributes
-import Html.Events exposing (onClick, onInput)
+import Html.Events exposing (keyCode, onClick, onInput)
+import Json.Decode as Decode
 import Random
 import Svg exposing (..)
 import Svg.Attributes exposing (..)
 import Task
 import Time
+import Tuple exposing (..)
+
+
+
+-- import Tuple exposing (Tuple)
 
 
 main =
@@ -89,8 +96,8 @@ board model =
             ]
             []
          ]
-            ++ (model.active |> toForm)
-            ++ (model.pile |> List.map toForm |> List.concat)
+            ++ toForm model.active
+            ++ toForm_ model.pile
         )
 
 
@@ -130,7 +137,7 @@ s =
         , ( 0, 0 )
         , ( 0, 1 )
         ]
-    , color = palette.lightblue
+    , color = palette.green
     , pivot = { r = 0.0, c = 0.0 }
     , rows = 2
     , cols = 3
@@ -160,7 +167,7 @@ i =
         , ( -1, 0 )
         , ( -2, 0 )
         ]
-    , color = palette.green
+    , color = palette.lightblue
     , pivot = { r = -0.5, c = 0.5 }
     , rows = 4
     , cols = 1
@@ -219,7 +226,7 @@ allTetrominos =
 
 type alias Model =
     { active : Tetromino
-    , pile : List Tetromino
+    , pile : List Block
     }
 
 
@@ -232,6 +239,31 @@ init _ =
     )
 
 
+toForm_ : List Block -> List (Svg msg)
+toForm_ shape =
+    let
+        -- basicB =
+        --     [ width size, height size ]
+        tans location =
+            String.fromInt (location * size_)
+
+        -- translate ( x_, y_ ) =
+        translate { pos, color } =
+            rect
+                [ width size
+                , height size
+                , x (tans (first pos))
+                , y (tans (second pos))
+                , fill color
+                ]
+                []
+
+        forms =
+            List.map translate shape
+    in
+    forms
+
+
 toForm : Tetromino -> List (Svg msg)
 toForm { shape, color } =
     let
@@ -240,6 +272,16 @@ toForm { shape, color } =
 
         pos location =
             String.fromInt (location * size_)
+
+        animateEl =
+            animate
+                [ attributeName "fill"
+                , from "red"
+                , to "blue"
+                , dur "15s"
+                , repeatCount "indefinite"
+                ]
+                []
 
         translate ( x_, y_ ) =
             rect (basicB ++ [ x (pos x_), y (pos y_) ]) []
@@ -282,8 +324,9 @@ rotate tetromino =
     in
     { tetromino
         | shape = newShape
-        , rows = tetromino.cols
-        , cols = tetromino.rows
+
+        -- , rows = tetromino.cols
+        -- , cols = tetromino.rows
     }
 
 
@@ -315,6 +358,9 @@ type Msg
     | MsgNewTetromino Int
     | GetNewTetromino
     | Tick Time.Posix
+    | FillRow Int
+    | RemoveFullRow
+    | Nop
 
 
 cmdRandomNewTetromino : Cmd Msg
@@ -342,7 +388,7 @@ update msg model =
                     model.active |> shift ( 0, 1 )
 
                 lowestPoint =
-                    newOne.shape |> List.map Tuple.second |> List.maximum
+                    newOne.shape |> List.map second |> List.maximum
             in
             case lowestPoint of
                 Just y ->
@@ -367,22 +413,84 @@ update msg model =
                     Array.get ind allTetrominos
                         |> Maybe.map (shift ( 4, 0 ))
                         |> Maybe.withDefault z
+
+                pileAdd tetromino =
+                    tetromino.shape
+                        |> List.map (\block -> { pos = block, color = tetromino.color })
             in
             ( { model
-                | pile = model.active :: model.pile
+                | pile = pileAdd model.active ++ model.pile
                 , active = newTetromino
               }
             , Cmd.none
             )
 
+        Nop ->
+            ( model, Cmd.none )
+
+        FillRow row ->
+            let
+                newRow y =
+                    List.range 0 8
+                        |> List.map (\n -> { pos = ( n, y ), color = "plum" })
+            in
+            ( { model | pile = newRow 19 ++ newRow 18 ++ newRow 17 ++ model.pile }, Cmd.none )
+
+        RemoveFullRow ->
+            let
+                aboveLine target =
+                    model.pile
+                        |> List.filter (\el -> Tuple.second el.pos < target)
+                        |> List.map
+                            (\el ->
+                                { el
+                                    | pos = ( first el.pos, second el.pos + 1 )
+                                }
+                            )
+
+                belowLine target =
+                    model.pile
+                        |> List.filter (\el -> Tuple.second el.pos > target)
+
+                pile_ target =
+                    aboveLine target ++ belowLine target
+            in
+            ( { model | pile = pile_ 18 }
+            , Cmd.none
+            )
 
 
--- SUBSCRIPTIONS
+key : Bool -> Int -> Msg
+key on keycode =
+    case keycode of
+        37 ->
+            Shift ( -1, 0 )
+
+        39 ->
+            Shift ( 1, 0 )
+
+        40 ->
+            Shift ( 0, 1 )
+
+        38 ->
+            Rotate
+
+        _ ->
+            Nop
+
+
+type alias Block =
+    { pos : Pos
+    , color : String
+    }
 
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    Time.every 1000 Tick
+    Sub.batch
+        [ Time.every 1000 Tick
+        , onKeyDown (Decode.map (key True) keyCode)
+        ]
 
 
 
@@ -397,8 +505,11 @@ view model =
             [ button [ onClick (Shift ( 0, -1 )) ] [ Html.text "up" ]
             , button [ onClick (Shift ( -1, 0 )) ] [ Html.text "left" ]
             , button [ onClick (Shift ( 1, 0 )) ] [ Html.text "right" ]
+            , button [ onClick (Shift ( 1, 0 )) ] [ Html.text "right" ]
             , button [ onClick (Shift ( 0, 1 )) ] [ Html.text "down" ]
             , button [ onClick Rotate ] [ Html.text "rotate" ]
             , button [ onClick GetNewTetromino ] [ Html.text "new" ]
+            , button [ onClick (FillRow 2) ] [ Html.text "row" ]
+            , button [ onClick RemoveFullRow ] [ Html.text "rem row" ]
             ]
         ]
