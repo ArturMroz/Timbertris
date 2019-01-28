@@ -8,6 +8,7 @@ import Html.Attributes
 import Html.Events exposing (keyCode, onClick, onInput)
 import Json.Decode as Decode
 import Random
+import Set
 import Svg exposing (..)
 import Svg.Attributes exposing (..)
 import Task
@@ -109,8 +110,6 @@ type alias Tetromino =
     { shape : List Pos
     , color : String
     , pivot : { r : Float, c : Float }
-    , rows : Int
-    , cols : Int
     }
 
 
@@ -124,8 +123,6 @@ z =
         ]
     , color = palette.red
     , pivot = { r = 0.0, c = 0.0 }
-    , rows = 2
-    , cols = 3
     }
 
 
@@ -139,8 +136,6 @@ s =
         ]
     , color = palette.green
     , pivot = { r = 0.0, c = 0.0 }
-    , rows = 2
-    , cols = 3
     }
 
 
@@ -154,8 +149,6 @@ t =
         ]
     , color = palette.purple
     , pivot = { r = 0.0, c = 0.0 }
-    , rows = 2
-    , cols = 3
     }
 
 
@@ -169,8 +162,6 @@ i =
         ]
     , color = palette.lightblue
     , pivot = { r = -0.5, c = 0.5 }
-    , rows = 4
-    , cols = 1
     }
 
 
@@ -184,8 +175,6 @@ l =
         ]
     , color = palette.blue
     , pivot = { r = 0.0, c = 0.0 }
-    , rows = 3
-    , cols = 2
     }
 
 
@@ -199,8 +188,6 @@ j =
         ]
     , color = palette.orange
     , pivot = { r = 0.0, c = 0.0 }
-    , rows = 3
-    , cols = 2
     }
 
 
@@ -214,8 +201,6 @@ o =
         ]
     , color = palette.yellow
     , pivot = { r = -0.5, c = 0.5 }
-    , rows = 2
-    , cols = 3
     }
 
 
@@ -232,22 +217,19 @@ type alias Model =
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( { active = z |> shift ( 0, -10 )
+    ( { active = z |> shift ( 4, 30 )
       , pile = []
       }
-    , cmdRandomNewTetromino
+    , Cmd.none
     )
 
 
 toForm_ : List Block -> List (Svg msg)
 toForm_ shape =
     let
-        -- basicB =
-        --     [ width size, height size ]
         tans location =
             String.fromInt (location * size_)
 
-        -- translate ( x_, y_ ) =
         translate { pos, color } =
             rect
                 [ width size
@@ -257,11 +239,8 @@ toForm_ shape =
                 , fill color
                 ]
                 []
-
-        forms =
-            List.map translate shape
     in
-    forms
+    List.map translate shape
 
 
 toForm : Tetromino -> List (Svg msg)
@@ -279,7 +258,6 @@ toForm { shape, color } =
                 , from "red"
                 , to "blue"
                 , dur "15s"
-                , repeatCount "indefinite"
                 ]
                 []
 
@@ -322,12 +300,7 @@ rotate tetromino =
         newShape =
             tetromino.shape |> List.map rotateHelper
     in
-    { tetromino
-        | shape = newShape
-
-        -- , rows = tetromino.cols
-        -- , cols = tetromino.rows
-    }
+    { tetromino | shape = newShape }
 
 
 shift : Pos -> Tetromino -> Tetromino
@@ -344,8 +317,15 @@ shift ( row, col ) tetromino =
 
         pivot_ =
             shiftHelperPivot tetromino.pivot
+
+        tetromino_ =
+            { tetromino | shape = shape_, pivot = pivot_ }
     in
-    { tetromino | shape = shape_, pivot = pivot_ }
+    if isInBounds tetromino_ then
+        tetromino_
+
+    else
+        tetromino_
 
 
 
@@ -360,6 +340,7 @@ type Msg
     | Tick Time.Posix
     | FillRow Int
     | RemoveFullRow
+      -- | HardDrop
     | Nop
 
 
@@ -372,14 +353,30 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Shift ( x, y ) ->
-            ( { model | active = shift ( x, y ) model.active }, Cmd.none )
+            let
+                active_ =
+                    model.active |> shift ( x, y )
+            in
+            if isValid active_ model.pile then
+                ( { model | active = active_ }, Cmd.none )
+
+            else
+                ( model, Cmd.none )
 
         Rotate ->
-            ( { model | active = rotate model.active }, Cmd.none )
+            let
+                active_ =
+                    rotate model.active
+            in
+            if isValid active_ model.pile then
+                ( { model | active = active_ }, Cmd.none )
+
+            else
+                ( model, Cmd.none )
 
         GetNewTetromino ->
             ( model
-            , Random.generate MsgNewTetromino (Random.int 0 6)
+            , cmdRandomNewTetromino
             )
 
         Tick newTime ->
@@ -390,28 +387,20 @@ update msg model =
                 lowestPoint =
                     newOne.shape |> List.map second |> List.maximum
             in
-            case lowestPoint of
-                Just y ->
-                    if y > 19 then
-                        ( model
-                        , Random.generate MsgNewTetromino (Random.int 0 6)
-                        )
+            if isValid newOne model.pile |> not then
+                ( model, cmdRandomNewTetromino )
 
-                    else
-                        ( { model | active = newOne }
-                        , Cmd.none
-                        )
-
-                Nothing ->
-                    ( { model | active = newOne }
-                    , Cmd.none
-                    )
+            else
+                ( { model | active = newOne }
+                , Cmd.none
+                )
 
         MsgNewTetromino ind ->
             let
                 newTetromino =
+                    -- i |> shift ( 4, 0 )
                     Array.get ind allTetrominos
-                        |> Maybe.map (shift ( 4, 0 ))
+                        |> Maybe.map (shift ( 4, 2 ))
                         |> Maybe.withDefault z
 
                 pileAdd tetromino =
@@ -419,12 +408,18 @@ update msg model =
                         |> List.map (\block -> { pos = block, color = tetromino.color })
             in
             ( { model
-                | pile = pileAdd model.active ++ model.pile
+                | pile = pileAdd model.active ++ model.pile |> clearLines
                 , active = newTetromino
               }
             , Cmd.none
             )
 
+        -- HardDrop ->
+        --     let
+        --         hardDropped =
+        --             model.active
+        --     in
+        --     ( { model | pile = model.pile ++ hardDropped }, cmdRandomNewTetromino )
         Nop ->
             ( model, Cmd.none )
 
@@ -434,30 +429,100 @@ update msg model =
                     List.range 0 8
                         |> List.map (\n -> { pos = ( n, y ), color = "plum" })
             in
-            ( { model | pile = newRow 19 ++ newRow 18 ++ newRow 17 ++ model.pile }, Cmd.none )
+            ( { model | pile = newRow 19 ++ newRow 17 ++ newRow 18 ++ model.pile }, Cmd.none )
 
         RemoveFullRow ->
-            let
-                aboveLine target =
-                    model.pile
-                        |> List.filter (\el -> Tuple.second el.pos < target)
-                        |> List.map
-                            (\el ->
-                                { el
-                                    | pos = ( first el.pos, second el.pos + 1 )
-                                }
-                            )
-
-                belowLine target =
-                    model.pile
-                        |> List.filter (\el -> Tuple.second el.pos > target)
-
-                pile_ target =
-                    aboveLine target ++ belowLine target
-            in
-            ( { model | pile = pile_ 18 }
+            ( { model | pile = model.pile |> clearLines |> clearGridBellowViewport }
             , Cmd.none
             )
+
+
+findFirstFullRow : List Block -> Maybe Int
+findFirstFullRow board_ =
+    case board_ of
+        [] ->
+            Nothing
+
+        x :: _ ->
+            let
+                lineY =
+                    second x.pos
+
+                ( curLine, others ) =
+                    -- board_ |> List.partition (\{ pos } -> second pos == lineY)
+                    board_ |> List.partition (.pos >> second >> (==) lineY)
+
+                curLineSet =
+                    curLine
+                        |> List.map (.pos >> first)
+                        |> Set.fromList
+            in
+            if Set.size curLineSet > 9 then
+                Just lineY
+
+            else
+                findFirstFullRow others
+
+
+clearLines : List Block -> List Block
+clearLines board_ =
+    case findFirstFullRow board_ of
+        Nothing ->
+            board_
+
+        Just row ->
+            let
+                clearedPile =
+                    board_ |> List.filter (\{ pos } -> second pos /= row)
+
+                -- board_ |> List.filter (.pos >> second >> (/=) row)
+                ( above, bellow ) =
+                    clearedPile |> List.partition (\{ pos } -> second pos < row)
+
+                -- clearedPile |> List.partition (.pos >> second >> (<) row)
+                shiftDown el =
+                    { el | pos = ( first el.pos, second el.pos + 1 ) }
+
+                shiftedAbove =
+                    above |> List.map shiftDown
+
+                clearedBellow =
+                    bellow |> List.filter (\{ pos } -> second pos < 20)
+            in
+            clearedBellow ++ shiftedAbove |> clearLines
+
+
+isValid : Tetromino -> List Block -> Bool
+isValid tetromino board_ =
+    isInBounds tetromino && not (isIntersecting tetromino board_)
+
+
+isIntersecting : Tetromino -> List Block -> Bool
+isIntersecting { shape } board_ =
+    let
+        checkLocation pos_ =
+            board_
+                |> List.map .pos
+                -- |> List.any (\b -> first b.pos == y_ && second b.pos == x_)
+                |> List.member pos_
+    in
+    List.any checkLocation shape
+
+
+isInBounds : Tetromino -> Bool
+isInBounds { shape } =
+    let
+        checkLocation ( c, r ) =
+            r >= 0 && r < 20 && c >= 0 && c < 10
+    in
+    List.all checkLocation shape
+
+
+clearGridBellowViewport : List Block -> List Block
+clearGridBellowViewport grid =
+    -- grid
+    -- grid |> List.filter (.pos >> second >> (<) 100)
+    grid |> List.filter (\{ pos } -> second pos < 20)
 
 
 key : Bool -> Int -> Msg
@@ -511,5 +576,11 @@ view model =
             , button [ onClick GetNewTetromino ] [ Html.text "new" ]
             , button [ onClick (FillRow 2) ] [ Html.text "row" ]
             , button [ onClick RemoveFullRow ] [ Html.text "rem row" ]
+            , debugDisplay model.active.shape
+            , model.pile |> List.map .pos |> debugDisplay
             ]
         ]
+
+
+debugDisplay el =
+    Html.p [] [ Html.text (Debug.toString el) ]
