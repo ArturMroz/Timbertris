@@ -16,10 +16,6 @@ import Time
 import Tuple exposing (..)
 
 
-
--- import Tuple exposing (Tuple)
-
-
 main =
     Browser.element
         { init = init
@@ -55,9 +51,21 @@ nord =
     , purple = "#b48ead"
     , lightblue = "#88c0d0"
     , blue = "#5e81ac"
+    , darkgray = "#3b4252"
+    , lightgray = "#d8dee9"
+    }
 
-    -- , darkgray = "#3b4252"
-    , darkgray = "#2e3440"
+
+thoughtProvoking : Palette
+thoughtProvoking =
+    { red = "#C02942"
+    , orange = "#D95B43"
+    , yellow = "#ECD078"
+    , green = "#a3be8c"
+    , purple = "#542437"
+    , lightblue = "#53777A"
+    , blue = "#5e81ac"
+    , darkgray = "#fafafa"
     , lightgray = "#d8dee9"
     }
 
@@ -69,7 +77,7 @@ palette =
 
 size_ : Int
 size_ =
-    30
+    34
 
 
 size =
@@ -77,33 +85,35 @@ size =
 
 
 boardWidth =
-    String.fromInt <| (size_ * 10)
+    String.fromInt (size_ * 10)
 
 
 boardHeight =
-    String.fromInt <| (size_ * 20)
+    String.fromInt (size_ * 20)
 
 
 board : Model -> Svg Msg
-board model =
+board { active, pile, harddrop } =
     svg
-        [ width boardWidth
-        , height boardHeight
-        ]
+        [ width boardWidth, height boardHeight ]
         ([ rect
-            [ width boardWidth
-            , height boardHeight
-            , fill palette.darkgray
-            ]
+            [ width boardWidth, height boardHeight, fill palette.darkgray ]
             []
          ]
-            ++ toForm model.active
-            ++ toForm_ model.pile
+            ++ toSvg active False
+            ++ toSvgPile pile
+            ++ toSvg harddrop True
         )
 
 
 type alias Pos =
     ( Int, Int )
+
+
+type alias Block =
+    { pos : Pos
+    , color : String
+    }
 
 
 type alias Tetromino =
@@ -115,12 +125,7 @@ type alias Tetromino =
 
 z : Tetromino
 z =
-    { shape =
-        [ ( 1, -1 )
-        , ( 1, 0 )
-        , ( 0, 0 )
-        , ( 0, 1 )
-        ]
+    { shape = [ ( -1, 0 ), ( 0, 0 ), ( 0, 1 ), ( 1, 1 ) ]
     , color = palette.red
     , pivot = { r = 0.0, c = 0.0 }
     }
@@ -128,12 +133,7 @@ z =
 
 s : Tetromino
 s =
-    { shape =
-        [ ( -1, -1 )
-        , ( -1, 0 )
-        , ( 0, 0 )
-        , ( 0, 1 )
-        ]
+    { shape = [ ( -1, 1 ), ( 0, 1 ), ( 0, 0 ), ( 1, 0 ) ]
     , color = palette.green
     , pivot = { r = 0.0, c = 0.0 }
     }
@@ -141,66 +141,41 @@ s =
 
 t : Tetromino
 t =
-    { shape =
-        [ ( 0, -1 )
-        , ( 0, 0 )
-        , ( 0, 1 )
-        , ( -1, 0 )
-        ]
+    { shape = [ ( 0, 0 ), ( 0, 1 ), ( 1, 1 ), ( -1, 1 ) ]
     , color = palette.purple
-    , pivot = { r = 0.0, c = 0.0 }
+    , pivot = { r = 0.0, c = 1.0 }
     }
 
 
 i : Tetromino
 i =
-    { shape =
-        [ ( 1, 0 )
-        , ( 0, 0 )
-        , ( -1, 0 )
-        , ( -2, 0 )
-        ]
+    { shape = [ ( 0, 0 ), ( 1, 0 ), ( 2, 0 ), ( -1, 0 ) ]
     , color = palette.lightblue
-    , pivot = { r = -0.5, c = 0.5 }
+    , pivot = { r = 1.0, c = 0.0 }
     }
 
 
 l : Tetromino
 l =
-    { shape =
-        [ ( 1, 0 )
-        , ( 0, 0 )
-        , ( -1, 0 )
-        , ( -1, 1 )
-        ]
+    { shape = [ ( 1, 1 ), ( 0, 1 ), ( -1, 1 ), ( 1, 0 ) ]
     , color = palette.blue
-    , pivot = { r = 0.0, c = 0.0 }
+    , pivot = { r = 0.0, c = 1.0 }
     }
 
 
 j : Tetromino
 j =
-    { shape =
-        [ ( 1, 0 )
-        , ( 0, 0 )
-        , ( -1, 0 )
-        , ( -1, -1 )
-        ]
+    { shape = [ ( 1, 1 ), ( 0, 1 ), ( -1, 1 ), ( -1, 0 ) ]
     , color = palette.orange
-    , pivot = { r = 0.0, c = 0.0 }
+    , pivot = { r = 0.0, c = 1.0 }
     }
 
 
 o : Tetromino
 o =
-    { shape =
-        [ ( 0, 0 )
-        , ( 0, 1 )
-        , ( -1, 1 )
-        , ( -1, 0 )
-        ]
+    { shape = [ ( 1, 0 ), ( 1, 1 ), ( 0, 1 ), ( 0, 0 ) ]
     , color = palette.yellow
-    , pivot = { r = -0.5, c = 0.5 }
+    , pivot = { r = 0.5, c = 0.5 }
     }
 
 
@@ -211,6 +186,7 @@ allTetrominos =
 
 type alias Model =
     { active : Tetromino
+    , harddrop : Tetromino
     , pile : List Block
     }
 
@@ -218,14 +194,15 @@ type alias Model =
 init : () -> ( Model, Cmd Msg )
 init _ =
     ( { active = z |> shift ( 4, 30 )
+      , harddrop = z |> shift ( 4, 30 )
       , pile = []
       }
     , Cmd.none
     )
 
 
-toForm_ : List Block -> List (Svg msg)
-toForm_ shape =
+toSvgPile : List Block -> List (Svg msg)
+toSvgPile shape =
     let
         tans location =
             String.fromInt (location * size_)
@@ -237,37 +214,51 @@ toForm_ shape =
                 , x (tans (first pos))
                 , y (tans (second pos))
                 , fill color
+
+                -- , stroke palette.darkgray
+                -- , strokeWidth "2px"
                 ]
                 []
     in
     List.map translate shape
 
 
-toForm : Tetromino -> List (Svg msg)
-toForm { shape, color } =
+toSvg : Tetromino -> Bool -> List (Svg msg)
+toSvg { shape, color, pivot } isHarddrop =
     let
-        basicB =
-            [ width size, height size, fill color ]
-
-        pos location =
+        str location =
             String.fromInt (location * size_)
 
-        animateEl =
-            animate
-                [ attributeName "fill"
-                , from "red"
-                , to "blue"
-                , dur "15s"
-                ]
-                []
+        common ( x_, y_ ) =
+            [ width size, height size, x (str x_), y (str y_) ]
 
-        translate ( x_, y_ ) =
-            rect (basicB ++ [ x (pos x_), y (pos y_) ]) []
+        normal =
+            [ fill color ]
 
-        forms =
-            List.map translate shape
+        hardDrop =
+            [ fill "transparent", stroke color, strokeWidth "2px" ]
+
+        strF location =
+            String.fromFloat ((location + 0.5) * toFloat size_)
+
+        pivotPoint { r, c } =
+            circle [ cx (strF r), cy (strF c), Svg.Attributes.r "3", fill "black" ] []
+
+        props =
+            if isHarddrop then
+                hardDrop
+
+            else
+                normal
+
+        translate pos_ =
+            rect (common pos_ ++ props) []
     in
-    forms
+    List.map translate shape
+
+
+
+--++ [ pivotPoint pivot ]
 
 
 rotateLocation : { r : Float, c : Float } -> Float -> Pos -> Pos
@@ -317,15 +308,21 @@ shift ( row, col ) tetromino =
 
         pivot_ =
             shiftHelperPivot tetromino.pivot
-
-        tetromino_ =
-            { tetromino | shape = shape_, pivot = pivot_ }
     in
-    if isInBounds tetromino_ then
-        tetromino_
+    { tetromino | shape = shape_, pivot = pivot_ }
+
+
+hardDropped_ : Tetromino -> List Block -> Tetromino
+hardDropped_ tetromino board_ =
+    let
+        lower =
+            tetromino |> shift ( 0, 1 )
+    in
+    if isValid lower board_ then
+        hardDropped_ lower board_
 
     else
-        tetromino_
+        tetromino
 
 
 
@@ -340,7 +337,7 @@ type Msg
     | Tick Time.Posix
     | FillRow Int
     | RemoveFullRow
-      -- | HardDrop
+    | HardDrop
     | Nop
 
 
@@ -349,77 +346,76 @@ cmdRandomNewTetromino =
     Random.generate (\ind -> MsgNewTetromino ind) (Random.int 0 6)
 
 
+moveFunction model func =
+    let
+        active_ =
+            func model.active
+    in
+    if isValid active_ model.pile then
+        ( { model
+            | active = active_
+            , harddrop = hardDropped_ active_ model.pile
+          }
+        , Cmd.none
+        )
+
+    else
+        ( model, Cmd.none )
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Shift ( x, y ) ->
-            let
-                active_ =
-                    model.active |> shift ( x, y )
-            in
-            if isValid active_ model.pile then
-                ( { model | active = active_ }, Cmd.none )
-
-            else
-                ( model, Cmd.none )
+            moveFunction model (shift ( x, y ))
 
         Rotate ->
-            let
-                active_ =
-                    rotate model.active
-            in
-            if isValid active_ model.pile then
-                ( { model | active = active_ }, Cmd.none )
-
-            else
-                ( model, Cmd.none )
+            moveFunction model rotate
 
         GetNewTetromino ->
-            ( model
-            , cmdRandomNewTetromino
-            )
+            ( model, cmdRandomNewTetromino )
 
         Tick newTime ->
             let
                 newOne =
                     model.active |> shift ( 0, 1 )
-
-                lowestPoint =
-                    newOne.shape |> List.map second |> List.maximum
             in
-            if isValid newOne model.pile |> not then
-                ( model, cmdRandomNewTetromino )
+            if isValid newOne model.pile then
+                ( { model | active = newOne }, Cmd.none )
 
             else
-                ( { model | active = newOne }
-                , Cmd.none
-                )
+                ( model, cmdRandomNewTetromino )
 
         MsgNewTetromino ind ->
             let
                 newTetromino =
-                    -- i |> shift ( 4, 0 )
+                    -- o |> shift ( 4, 1 )
                     Array.get ind allTetrominos
-                        |> Maybe.map (shift ( 4, 2 ))
+                        |> Maybe.map (shift ( 4, 0 ))
                         |> Maybe.withDefault z
 
                 pileAdd tetromino =
                     tetromino.shape
                         |> List.map (\block -> { pos = block, color = tetromino.color })
+
+                pile_ =
+                    pileAdd model.active ++ model.pile |> clearLines
             in
             ( { model
-                | pile = pileAdd model.active ++ model.pile |> clearLines
+                | pile = pile_
                 , active = newTetromino
+                , harddrop = hardDropped_ newTetromino pile_
               }
             , Cmd.none
             )
 
-        -- HardDrop ->
-        --     let
-        --         hardDropped =
-        --             model.active
-        --     in
-        --     ( { model | pile = model.pile ++ hardDropped }, cmdRandomNewTetromino )
+        HardDrop ->
+            let
+                hardDropped =
+                    hardDropped_ model.active model.pile
+            in
+            ( { model | active = hardDropped }, cmdRandomNewTetromino )
+
         Nop ->
             ( model, Cmd.none )
 
@@ -449,8 +445,8 @@ findFirstFullRow board_ =
                     second x.pos
 
                 ( curLine, others ) =
-                    -- board_ |> List.partition (\{ pos } -> second pos == lineY)
-                    board_ |> List.partition (.pos >> second >> (==) lineY)
+                    -- board_ |> List.partition (.pos >> second >> (==) lineY)
+                    board_ |> List.partition (\{ pos } -> second pos == lineY)
 
                 curLineSet =
                     curLine
@@ -473,13 +469,13 @@ clearLines board_ =
         Just row ->
             let
                 clearedPile =
+                    -- board_ |> List.filter (.pos >> second >> (/=) row)
                     board_ |> List.filter (\{ pos } -> second pos /= row)
 
-                -- board_ |> List.filter (.pos >> second >> (/=) row)
                 ( above, bellow ) =
+                    -- clearedPile |> List.partition (.pos >> second >> (<) row)
                     clearedPile |> List.partition (\{ pos } -> second pos < row)
 
-                -- clearedPile |> List.partition (.pos >> second >> (<) row)
                 shiftDown el =
                     { el | pos = ( first el.pos, second el.pos + 1 ) }
 
@@ -492,19 +488,11 @@ clearLines board_ =
             clearedBellow ++ shiftedAbove |> clearLines
 
 
-isValid : Tetromino -> List Block -> Bool
-isValid tetromino board_ =
-    isInBounds tetromino && not (isIntersecting tetromino board_)
-
-
 isIntersecting : Tetromino -> List Block -> Bool
 isIntersecting { shape } board_ =
     let
         checkLocation pos_ =
-            board_
-                |> List.map .pos
-                -- |> List.any (\b -> first b.pos == y_ && second b.pos == x_)
-                |> List.member pos_
+            board_ |> List.any (.pos >> (==) pos_)
     in
     List.any checkLocation shape
 
@@ -513,15 +501,18 @@ isInBounds : Tetromino -> Bool
 isInBounds { shape } =
     let
         checkLocation ( c, r ) =
-            r >= 0 && r < 20 && c >= 0 && c < 10
+            c >= 0 && c < 10 && r < 20
     in
     List.all checkLocation shape
 
 
+isValid : Tetromino -> List Block -> Bool
+isValid tetromino board_ =
+    isInBounds tetromino && not (isIntersecting tetromino board_)
+
+
 clearGridBellowViewport : List Block -> List Block
 clearGridBellowViewport grid =
-    -- grid
-    -- grid |> List.filter (.pos >> second >> (<) 100)
     grid |> List.filter (\{ pos } -> second pos < 20)
 
 
@@ -540,20 +531,17 @@ key on keycode =
         38 ->
             Rotate
 
+        32 ->
+            HardDrop
+
         _ ->
             Nop
-
-
-type alias Block =
-    { pos : Pos
-    , color : String
-    }
 
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
     Sub.batch
-        [ Time.every 1000 Tick
+        [ Time.every 600 Tick
         , onKeyDown (Decode.map (key True) keyCode)
         ]
 
@@ -577,7 +565,8 @@ view model =
             , button [ onClick (FillRow 2) ] [ Html.text "row" ]
             , button [ onClick RemoveFullRow ] [ Html.text "rem row" ]
             , debugDisplay model.active.shape
-            , model.pile |> List.map .pos |> debugDisplay
+
+            -- , model.pile |> List.map .pos |> debugDisplay
             ]
         ]
 
