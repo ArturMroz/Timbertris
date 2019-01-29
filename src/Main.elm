@@ -77,7 +77,7 @@ palette =
 
 size_ : Int
 size_ =
-    34
+    35
 
 
 size =
@@ -93,7 +93,7 @@ boardHeight =
 
 
 board : Model -> Svg Msg
-board { active, pile, harddrop } =
+board { active, pile, ghost } =
     svg
         [ width boardWidth, height boardHeight ]
         ([ rect
@@ -102,7 +102,7 @@ board { active, pile, harddrop } =
          ]
             ++ toSvg active False
             ++ toSvgPile pile
-            ++ toSvg harddrop True
+            ++ toSvg ghost True
         )
 
 
@@ -186,16 +186,26 @@ allTetrominos =
 
 type alias Model =
     { active : Tetromino
-    , harddrop : Tetromino
+    , ghost : Tetromino
     , pile : List Block
+    , lines : Int
+    , score : Int
+    , level : Int
+    , prevLevelGoal : Float
+    , nextLevelGoal : Float
     }
 
 
 init : () -> ( Model, Cmd Msg )
 init _ =
     ( { active = z |> shift ( 4, 30 )
-      , harddrop = z |> shift ( 4, 30 )
+      , ghost = z |> shift ( 4, 30 )
       , pile = []
+      , lines = 0
+      , score = 0
+      , level = 1
+      , prevLevelGoal = 0
+      , nextLevelGoal = 4
       }
     , Cmd.none
     )
@@ -227,7 +237,11 @@ toSvg : Tetromino -> Bool -> List (Svg msg)
 toSvg { shape, color, pivot } isHarddrop =
     let
         str location =
+            -- String.fromInt (location * size_ + 2)
             String.fromInt (location * size_)
+
+        inset x =
+            x - 4 |> String.fromInt
 
         common ( x_, y_ ) =
             [ width size, height size, x (str x_), y (str y_) ]
@@ -236,14 +250,18 @@ toSvg { shape, color, pivot } isHarddrop =
             [ fill color ]
 
         hardDrop =
-            [ fill "transparent", stroke color, strokeWidth "2px" ]
+            [ fill "transparent"
+            , stroke color
+            , strokeWidth "2px"
 
-        strF location =
-            String.fromFloat ((location + 0.5) * toFloat size_)
+            -- , height (inset size_)
+            -- , width (inset size_)
+            ]
 
-        pivotPoint { r, c } =
-            circle [ cx (strF r), cy (strF c), Svg.Attributes.r "3", fill "black" ] []
-
+        -- strF location =
+        --     String.fromFloat ((location + 0.5) * toFloat size_)
+        -- pivotPoint { r, c } =
+        --     circle [ cx (strF r), cy (strF c), Svg.Attributes.r "3", fill "black" ] []
         props =
             if isHarddrop then
                 hardDrop
@@ -251,14 +269,30 @@ toSvg { shape, color, pivot } isHarddrop =
             else
                 normal
 
+        animateStuff =
+            animate
+                [ attributeName "opacity"
+                , from "1"
+                , to "1"
+                , by "0.4"
+                , dur "4s"
+                , values "1; 0.5; 1"
+                , keyTimes "0; 0.5; 1"
+                , repeatCount "indefinite"
+                ]
+                []
+
+        children =
+            if isHarddrop then
+                [ animateStuff ]
+
+            else
+                []
+
         translate pos_ =
             rect (common pos_ ++ props) []
     in
     List.map translate shape
-
-
-
---++ [ pivotPoint pivot ]
 
 
 rotateLocation : { r : Float, c : Float } -> Float -> Pos -> Pos
@@ -329,24 +363,21 @@ hardDropped_ tetromino board_ =
 -- UPDATE
 
 
-type Msg
-    = Rotate
-    | Shift ( Int, Int )
-    | MsgNewTetromino Int
-    | GetNewTetromino
-    | Tick Time.Posix
-    | FillRow Int
-    | RemoveFullRow
-    | HardDrop
-    | Nop
-
-
 cmdRandomNewTetromino : Cmd Msg
 cmdRandomNewTetromino =
     Random.generate (\ind -> MsgNewTetromino ind) (Random.int 0 6)
 
 
-moveFunction model func =
+
+-- moveFunction : Function -> Model -> ( Model, Cmd Msg )
+
+
+testFunction func a =
+    func a
+
+
+moveFunction : (Tetromino -> Tetromino) -> Model -> ( Model, Cmd Msg )
+moveFunction func model =
     let
         active_ =
             func model.active
@@ -354,7 +385,7 @@ moveFunction model func =
     if isValid active_ model.pile then
         ( { model
             | active = active_
-            , harddrop = hardDropped_ active_ model.pile
+            , ghost = hardDropped_ active_ model.pile
           }
         , Cmd.none
         )
@@ -363,25 +394,35 @@ moveFunction model func =
         ( model, Cmd.none )
 
 
+type Msg
+    = Rotate
+    | Shift ( Int, Int )
+    | MsgNewTetromino Int
+      -- | GetNewTetromino
+    | Tick Time.Posix
+    | FillRow Int
+      -- | RemoveFullRow
+    | HardDrop
+    | NewGame
+    | Nop
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Shift ( x, y ) ->
-            moveFunction model (shift ( x, y ))
+            moveFunction (shift ( x, y )) model
 
         Rotate ->
-            moveFunction model rotate
-
-        GetNewTetromino ->
-            ( model, cmdRandomNewTetromino )
+            moveFunction rotate model
 
         Tick newTime ->
             let
-                newOne =
+                active_ =
                     model.active |> shift ( 0, 1 )
             in
-            if isValid newOne model.pile then
-                ( { model | active = newOne }, Cmd.none )
+            if isValid active_ model.pile then
+                ( { model | active = active_ }, Cmd.none )
 
             else
                 ( model, cmdRandomNewTetromino )
@@ -398,23 +439,42 @@ update msg model =
                     tetromino.shape
                         |> List.map (\block -> { pos = block, color = tetromino.color })
 
-                pile_ =
-                    pileAdd model.active ++ model.pile |> clearLines
+                ( pile_, lines_ ) =
+                    ( pileAdd model.active ++ model.pile, 0 ) |> clearLines
+
+                ( level_, prevLevelGoal_, nextLevelGoal_ ) =
+                    if model.lines + lines_ - round model.prevLevelGoal >= round model.nextLevelGoal then
+                        ( model.level + 1
+                        , model.nextLevelGoal
+                        , model.nextLevelGoal * 1.618
+                        )
+
+                    else
+                        ( model.level, model.prevLevelGoal, model.nextLevelGoal )
             in
-            ( { model
-                | pile = pile_
-                , active = newTetromino
-                , harddrop = hardDropped_ newTetromino pile_
-              }
-            , Cmd.none
-            )
+            if isValid newTetromino pile_ then
+                ( { model
+                    | pile = pile_
+                    , active = newTetromino
+                    , ghost = hardDropped_ newTetromino pile_
+                    , lines = model.lines + lines_
+                    , level = level_
+                    , prevLevelGoal = prevLevelGoal_
+                    , nextLevelGoal = nextLevelGoal_
+                  }
+                , Cmd.none
+                )
+
+            else
+                ( { model | pile = [] }, Cmd.none )
 
         HardDrop ->
-            let
-                hardDropped =
-                    hardDropped_ model.active model.pile
-            in
-            ( { model | active = hardDropped }, cmdRandomNewTetromino )
+            ( { model | active = model.ghost }
+            , cmdRandomNewTetromino
+            )
+
+        NewGame ->
+            ( { model | pile = [] }, Cmd.none )
 
         Nop ->
             ( model, Cmd.none )
@@ -427,10 +487,12 @@ update msg model =
             in
             ( { model | pile = newRow 19 ++ newRow 17 ++ newRow 18 ++ model.pile }, Cmd.none )
 
-        RemoveFullRow ->
-            ( { model | pile = model.pile |> clearLines |> clearGridBellowViewport }
-            , Cmd.none
-            )
+
+
+-- RemoveFullRow ->
+--     ( { model | pile = model.pile |> clearLines |> clearGridBellowViewport }
+--     , Cmd.none
+--     )
 
 
 findFirstFullRow : List Block -> Maybe Int
@@ -460,11 +522,11 @@ findFirstFullRow board_ =
                 findFirstFullRow others
 
 
-clearLines : List Block -> List Block
-clearLines board_ =
+clearLines : ( List Block, Int ) -> ( List Block, Int )
+clearLines ( board_, linesSoFar ) =
     case findFirstFullRow board_ of
         Nothing ->
-            board_
+            ( board_, linesSoFar )
 
         Just row ->
             let
@@ -485,7 +547,7 @@ clearLines board_ =
                 clearedBellow =
                     bellow |> List.filter (\{ pos } -> second pos < 20)
             in
-            clearedBellow ++ shiftedAbove |> clearLines
+            ( clearedBellow ++ shiftedAbove, linesSoFar + 1 ) |> clearLines
 
 
 isIntersecting : Tetromino -> List Block -> Bool
@@ -548,28 +610,93 @@ subscriptions model =
 
 
 -- VIEW
+-- myStyle : Model -> Html.Attribute
+-- myStyle : Html.Attributes.atr
+
+
+myStyle =
+    Html.Attributes.style "siemak" "hehe"
+
+
+
+-- [ ( "backgroundColor", "red" )
+-- , ( "height", "90px" )
+-- , ( "width", "100%" )
+-- ]
+-- myStyle model =
+--     Html.Attributes.style
+--         [ -- ("backgroundColor", "red")
+--           -- , ("height", "90px")
+--           ( "width", "100%" )
+--         ]
+
+
+getNextLevel : Model -> String
+getNextLevel { lines, prevLevelGoal, nextLevelGoal } =
+    (toFloat lines - prevLevelGoal) / nextLevelGoal * 100 |> String.fromFloat
 
 
 view : Model -> Html Msg
 view model =
-    div []
+    div [ Html.Attributes.class "main" ]
         [ board model
-        , div []
-            [ button [ onClick (Shift ( 0, -1 )) ] [ Html.text "up" ]
-            , button [ onClick (Shift ( -1, 0 )) ] [ Html.text "left" ]
-            , button [ onClick (Shift ( 1, 0 )) ] [ Html.text "right" ]
+        , div [ Html.Attributes.class "nav" ]
+            [ -- button [ onClick (Shift ( 0, -1 )) ] [ Html.text "up" ]
+              button [ onClick (Shift ( -1, 0 )) ] [ Html.text "left" ]
             , button [ onClick (Shift ( 1, 0 )) ] [ Html.text "right" ]
             , button [ onClick (Shift ( 0, 1 )) ] [ Html.text "down" ]
             , button [ onClick Rotate ] [ Html.text "rotate" ]
-            , button [ onClick GetNewTetromino ] [ Html.text "new" ]
-            , button [ onClick (FillRow 2) ] [ Html.text "row" ]
-            , button [ onClick RemoveFullRow ] [ Html.text "rem row" ]
-            , debugDisplay model.active.shape
 
-            -- , model.pile |> List.map .pos |> debugDisplay
+            -- , button [ onClick (FillRow 2) ] [ Html.text "row" ]
             ]
+        , div [ Html.Attributes.class "score" ]
+            [ Html.h3 [] [ Html.text "Lines" ]
+            , Html.p [] [ Html.text (String.fromInt model.lines) ]
+            , Html.h3 [] [ Html.text "Goal" ]
+            , Html.p [] [ Html.text (String.fromFloat model.nextLevelGoal) ]
+            , Html.h3 [] [ Html.text "Level" ]
+            , Html.p [] [ Html.text (String.fromInt model.level) ]
+            , Html.div
+                [ Html.Attributes.class "level" ]
+                [ Html.div
+                    [ Html.Attributes.class "level-bar"
+                    , Html.Attributes.style "width" (getNextLevel model ++ "%")
+                    ]
+                    []
+                ]
+
+            -- , Html.p [] [ Html.text (String.fromInt <| round <| toFloat model.lines / model.nextLevelGoal * 100) ]
+            , button [ onClick NewGame ] [ Html.text "new game" ]
+            ]
+
+        -- , div [] (debugDisplay__ model)
         ]
 
 
-debugDisplay el =
-    Html.p [] [ Html.text (Debug.toString el) ]
+
+-- debugDisplay__ : Model -> List (Html Msg)
+-- debugDisplay__ model =
+--     let
+--         debugDisplay el =
+--             Html.p [] [ Html.text (Debug.toString el) ]
+--     in
+--     [ debugDisplay model.active.shape
+--     , debugDisplay model.score
+--     , debugDisplay model.lines
+--     , debugDisplay model.level
+--     , debugDisplay model.nextLevelGoal
+--     , debugDisplay (round <| toFloat model.lines / model.nextLevelGoal * 100)
+--     ]
+-- TODO
+-- next tetromino
+-- score
+-- game over
+-- pause
+-- new game
+-- framediff sub
+-- animate full row
+-- animate drop after full row clear
+-- animate hard drop
+-- sounds
+-- rotate by the edge
+-- next level floats
