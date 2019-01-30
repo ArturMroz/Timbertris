@@ -7,71 +7,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="block puzzle">
     <title>Timbeeer... tris</title>
-    <link rel="stylesheet" href="normalize.css">
-    <style>
-        body {
-            display: grid;
-            place-content: center center;
-            background: #eee;
-            height: 100vh;
-        }
 
-        .main {
-            /* background: plum; */
-            margin: 20px auto;
-            display: grid;
-            grid-template-columns: auto 200px;
-            grid-template-rows: auto 20px;
-            place-content: center center;
-        }
-
-        .nav {
-            grid-row: 2
-        }
-
-        .score {
-            grid-column: 2;
-            padding: 20px;
-        }
-
-        .level {
-            background: #efefef;
-            flex: 1;
-            height: 10px;
-            display: flex;
-            align-items: flex-start;
-            margin: 10px;
-            /* border-radius: 50px; */
-            box-shadow: 0 0 1px 3px rgba(0, 0, 0, 0.1);
-            overflow: hidden;
-        }
-
-        .level-bar {
-            height: 100%;
-            background: linear-gradient(-70deg, #2376ae 0%, #c16ecf 100%);
-            text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.2);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 2px;
-            color: white;
-            width: 0%;
-        }
-    </style>
+    <link href="https://fonts.googleapis.com/css?family=Shrikhand" rel="stylesheet">
+    <link rel="stylesheet" href="css/normalize.css">
+    <link rel="stylesheet" href="css/style.css">
 </head>
 
 <body>
-    <!-- <h3>siemaaaa</h3> -->
     <div id="elm"></div>
-    <script src="elm.js"></script>
-    <!-- <script src="elm.min.js"></script> -->
+    <!-- <script src="elm.js"></script> -->
+    <script src="elm.min.js"></script>
     <script>
         var app = Elm.Main.init({
             node: document.getElementById('elm'),
         });
 
-        window.addEventListener('keydown', function (e)
-        {
+        window.addEventListener('keydown', function (e) {
             if ([32, 37, 38, 39, 40].indexOf(e.keyCode) > -1) {
                 e.preventDefault();
             }
