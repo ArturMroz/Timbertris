@@ -1,24 +1,24 @@
 module Main exposing (cmdRandomNewTetromino, init, key, main, moveFunction, subscriptions, update)
 
-import Array exposing (Array)
+import Array
 import Browser
-import Browser.Events exposing (onAnimationFrameDelta, onKeyDown, onKeyUp, onResize)
-import Html.Events exposing (keyCode, onClick)
+import Browser.Events exposing (onAnimationFrameDelta, onKeyDown, onResize)
+import Html.Events exposing (keyCode)
 import Json.Decode as Decode
-import Messages exposing (..)
-import Model exposing (..)
+import Messages exposing (Msg(..))
+import Model exposing (Model, Tetromino, allTetrominos, clearLines, emptyShape, hardDropped, isValid, rotate, scoreLines, shift, z)
 import Random
-import Task
 import Time
-import View exposing (..)
+import View exposing (view)
 
 
+main : Program () Model Msg
 main =
     Browser.element
         { init = init
         , update = update
         , subscriptions = subscriptions
-        , view = View.view
+        , view = view
         }
 
 
@@ -50,8 +50,8 @@ cmdRandomNewTetromino =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        Shift ( x, y ) ->
-            moveFunction (shift ( x, y )) model
+        Shift pos ->
+            moveFunction (shift pos) model
 
         Rotate ->
             moveFunction rotate model
@@ -72,6 +72,7 @@ update msg model =
                 next_ =
                     Array.get ind allTetrominos
                         |> Maybe.withDefault z
+                        |> shift ( 1, 0 )
 
                 active_ =
                     model.next |> shift ( 4, 0 )
@@ -82,7 +83,7 @@ update msg model =
                 --     |> Maybe.withDefault z
                 pileAdd tetromino =
                     tetromino.shape
-                        |> List.map (\block -> { pos = block, color = tetromino.color })
+                        |> List.map (\pos_ -> { pos = pos_, color = tetromino.color })
 
                 ( pile_, lines_ ) =
                     ( model.pile ++ pileAdd model.active, 0 ) |> clearLines
@@ -111,10 +112,8 @@ update msg model =
                 )
 
             else
-                -- ( { model | pile = [] }, Cmd.none )
                 update NewGame model
 
-        -- ( model, NewGame )
         HardDrop ->
             ( { model | active = model.ghost }
             , cmdRandomNewTetromino
@@ -133,14 +132,6 @@ update msg model =
 
         Nop ->
             ( model, Cmd.none )
-
-        FillRow row ->
-            let
-                newRow y =
-                    List.range 0 8
-                        |> List.map (\n -> { pos = ( n, y ), color = "plum" })
-            in
-            ( { model | pile = newRow 19 ++ newRow 17 ++ newRow 18 ++ model.pile }, Cmd.none )
 
 
 moveFunction : (Tetromino -> Tetromino) -> Model -> ( Model, Cmd Msg )
@@ -161,8 +152,30 @@ moveFunction func model =
         ( model, Cmd.none )
 
 
-key : Bool -> Int -> Msg
-key on keycode =
+
+-- type Direction
+--     = Left
+--     | Right
+--     | Up
+--     | Down
+--     | Space
+--     | Other
+-- keyDecoder : Decode.Decoder Direction
+-- keyDecoder =
+--     Decode.map toDirection (Decode.field "key" Decode.string)
+-- toDirection : String -> Direction
+-- toDirection string =
+--     case string of
+--         "ArrowLeft" ->
+--             Left
+--         "ArrowRight" ->
+--             Right
+--         _ ->
+--             Other
+
+
+key : Int -> Msg
+key keycode =
     case keycode of
         37 ->
             Shift ( -1, 0 )
@@ -187,9 +200,9 @@ subscriptions : Model -> Sub Msg
 subscriptions model =
     let
         delta =
-            Basics.max 25 (800 - toFloat (model.level * 50))
+            Basics.max 25 (800 - toFloat (model.level * 75))
     in
     Sub.batch
         [ Time.every delta Tick
-        , onKeyDown (Decode.map (key True) keyCode)
+        , onKeyDown (Decode.map key keyCode)
         ]

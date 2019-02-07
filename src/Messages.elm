@@ -9,7 +9,7 @@ type Msg
     | MsgNewTetromino Int
       -- | GetNewTetromino
     | Tick Time.Posix
-    | FillRow Int
+      -- | FillRow Int
       -- | RemoveFullRow
     | HardDrop
     | NewGame

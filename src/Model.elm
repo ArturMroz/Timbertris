@@ -4,7 +4,6 @@ module Model exposing
     , Palette
     , Pos
     , State
-    , State1
     , Tetromino
     , allTetrominos
     , clearLines
@@ -32,8 +31,8 @@ module Model exposing
     )
 
 import Array exposing (Array)
-import Messages exposing (..)
-import Tuple exposing (..)
+import Messages exposing (Msg(..))
+import Tuple exposing (first, second)
 
 
 type alias Model =
@@ -49,10 +48,11 @@ type alias Model =
     }
 
 
-type State1
-    = Playdsing
-    | Pausefdd
-    | Stoppesd
+
+-- type State1
+--     = Playdsing
+--     | Pausefdd
+--     | Stoppesd
 
 
 type State
@@ -308,6 +308,7 @@ clearLines ( board, linesSoFar ) =
             ( clearedBellow ++ shiftedAbove, linesSoFar + 1 ) |> clearLines
 
 
+scoreLines : Int -> Model -> Int
 scoreLines lines { level } =
     case lines of
         1 ->

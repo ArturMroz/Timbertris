@@ -1,16 +1,23 @@
-module View exposing (boardHeight, boardWidth, nextPreview, renderBoard, renderProgressBar, toSvg, toSvgNext, toSvgPile, view)
-
--- import Random
+module View exposing
+    ( boardHeight
+    , boardWidth
+    , nextPreview
+    , renderBoard
+    , renderProgressBar
+    , toSvg
+    , toSvgNext
+    , toSvgPile
+    , view
+    )
 
 import Html exposing (Html, a, button, div, h3, span, text)
 import Html.Attributes exposing (class, href, style, target)
-import Html.Events exposing (keyCode, onClick)
-import Json.Decode as Decode
-import Messages exposing (..)
-import Model exposing (..)
-import Svg exposing (Svg, rect, svg)
+import Html.Events exposing (onClick)
+import Messages exposing (Msg(..))
+import Model exposing (Block, Model, Tetromino, palette, size, totalCols, totalRows)
+import Svg exposing (Svg, animate, rect, svg)
 import Svg.Attributes exposing (fill, height, stroke, strokeWidth, width, x, y)
-import Tuple exposing (..)
+import Tuple exposing (first, second)
 
 
 boardWidth : String
@@ -18,6 +25,7 @@ boardWidth =
     String.fromInt (size * totalCols)
 
 
+boardHeight : String
 boardHeight =
     String.fromInt (size * totalRows)
 
@@ -26,13 +34,15 @@ renderBoard : Model -> Svg Msg
 renderBoard { active, pile, ghost } =
     svg
         [ width boardWidth, height boardHeight ]
-        ([ rect
-            [ width boardWidth, height boardHeight, fill palette.darkgray ]
+        (rect
+            [ width boardWidth
+            , height boardHeight
+            , fill palette.darkgray
+            ]
             []
-         ]
-            ++ toSvg active False
-            ++ toSvg ghost True
+            :: toSvg ghost True
             ++ toSvgPile pile
+            ++ toSvg active False
         )
 
 
@@ -45,6 +55,21 @@ nextPreview next =
         -- , Svg.Attributes.style ("background: " ++ next.color)
         ]
         (toSvgNext next)
+
+
+
+-- translate pos color =
+--     rect
+--         [ width (String.fromInt size)
+--         , height (String.fromInt size)
+--         , x (tans (first pos))
+--         , y (tans (second pos))
+--         , fill tetromino.color
+--         -- , opacity "0.8"
+--         -- , stroke palette.darkgray
+--         -- , strokeWidth "2px"
+--         ]
+--         []
 
 
 toSvgNext : Tetromino -> List (Svg msg)
@@ -60,12 +85,14 @@ toSvgNext tetromino =
                 , x (tans (first pos))
                 , y (tans (second pos))
                 , fill tetromino.color
+                , stroke "white"
+                , strokeWidth "2"
 
                 -- , opacity "0.8"
                 -- , stroke palette.darkgray
                 -- , strokeWidth "2px"
                 ]
-                []
+                [ Svg.animate [] [] ]
     in
     List.map translate tetromino.shape
 
@@ -86,8 +113,9 @@ toSvgPile shape =
 
                 -- , rx "5"
                 -- , ry "5"
-                -- , stroke color
-                -- , strokeWidth "0.5px"
+                , stroke "white"
+                , strokeWidth "2px"
+
                 -- , class "testy"
                 -- , stroke palette.darkgray
                 -- , strokeWidth "2px"
@@ -98,47 +126,49 @@ toSvgPile shape =
 
 
 toSvg : Tetromino -> Bool -> List (Svg msg)
-toSvg { shape, color, pivot } ghost =
+toSvg { shape, color } ghost =
     let
         str location =
-            -- String.fromInt (location * size + 2)
             String.fromInt (location * size) ++ "px"
+
+        strGhost location =
+            String.fromInt ((location * size) + 2) ++ "px"
 
         inset x =
             x - 4 |> String.fromInt
 
-        common ( x_, y_ ) =
+        common =
             [ width (String.fromInt size)
             , height (String.fromInt size)
+            ]
+
+        normal ( x_, y_ ) =
+            [ fill color
+            , strokeWidth "2"
+            , stroke "white"
             , x (str x_)
             , y (str y_)
             ]
 
-        normal =
-            [ fill color, strokeWidth "0.5" ]
-
-        ghostProps =
+        ghostProps ( x_, y_ ) =
             [ fill "transparent"
             , stroke color
             , strokeWidth "2px"
-
-            -- , height (inset size)
-            -- , width (inset size)
+            , height (inset size)
+            , width (inset size)
+            , x (strGhost x_)
+            , y (strGhost y_)
             ]
 
-        -- strF location =
-        --     String.fromFloat ((location + 0.5) * toFloat size)
-        -- pivotPoint { r, c } =
-        --     circle [ cx (strF r), cy (strF c), Svg.Attributes.r "3", fill "black" ] []
-        props =
+        props pos =
             if ghost then
-                ghostProps
+                ghostProps pos
 
             else
-                normal
+                normal pos
 
         translate pos_ =
-            rect (common pos_ ++ props) []
+            rect (common ++ props pos_) []
     in
     List.map translate shape
 
@@ -151,13 +181,15 @@ view model =
             [ button [ onClick Rotate ] [ text "↻" ]
             , button [ onClick (Shift ( -1, 0 )) ] [ text "↼" ]
             , button [ onClick (Shift ( 1, 0 )) ] [ text "⇁" ]
-            , button [ onClick (Shift ( 0, 1 )) ] [ text "⇂" ]
-            , button [ onClick HardDrop ] [ text "⇓" ]
+
+            -- , button [ onClick (Shift ( 0, 1 )) ] [ text "⇂" ] →
+            -- , button [ onClick HardDrop ] [ text "⇓" ]
+            , button [ onClick HardDrop ] [ text "⇂" ]
             ]
         , div [ class "score" ]
             [ div [ class "next" ]
                 [ h3 [] [ text "next" ]
-                , nextPreview (model.next |> shift ( 1, 0 ))
+                , nextPreview model.next
                 ]
             , div []
                 [ h3 [] [ text "score" ]
@@ -173,10 +205,7 @@ view model =
         , div [ class "info" ]
             [ a
                 [ href "https://github.com/ArturMroz/Timbertris", target "blank_" ]
-                [ h3 [] [ text "timbertris 🍂" ]
-
-                -- , span [] [ text "— by artur" ]
-                ]
+                [ h3 [] [ text "timbertris 🍂" ] ]
             ]
         ]
 
@@ -208,16 +237,19 @@ renderProgressBar model =
 
 
 
--- TODO
+-- TODOS
 -- ** CRITICAL **
 -- new game
 -- pause
 -- game over
--- score harddrop
--- score back-to-back
+-- stop first tetromino from scoring
 -- framediff sub
+-- hardrop doesnt lock immediately
+-- score harddrop
 -- rotate by the edge
+-- make design responsive
 -- ** NICE TO HAVE **
+-- score back-to-back
 -- animate full row
 -- animate drop after full row clear
 -- animate hard drop
