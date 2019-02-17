@@ -48,7 +48,7 @@ a {
 }
 
 svg rect {
-  transition: all 0.25s;
+  transition: color 0.25s;
 }
 
 button {

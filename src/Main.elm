@@ -6,9 +6,10 @@ import Browser.Events exposing (onAnimationFrameDelta, onKeyDown, onResize)
 import Html.Events exposing (keyCode)
 import Json.Decode as Decode
 import Messages exposing (Msg(..))
-import Model exposing (Model, Tetromino, allTetrominos, clearLines, emptyShape, hardDropped, isValid, rotate, scoreLines, shift, z)
+import Model exposing (Block, Model, Tetromino, allTetrominos, emptyShape, findFirstFullRow, hardDropped, isValid, rotate, shift, totalRows, z)
 import Random
 import Time
+import Tuple exposing (first, second)
 import View exposing (view)
 
 
@@ -152,6 +153,53 @@ moveFunction func model =
         ( model, Cmd.none )
 
 
+clearLines : ( List Block, Int ) -> ( List Block, Int )
+clearLines ( board, linesSoFar ) =
+    case findFirstFullRow board of
+        Nothing ->
+            ( board, linesSoFar )
+
+        Just row ->
+            let
+                clearedPile =
+                    -- board |> List.filter (.pos >> second >> (/=) row)
+                    board |> List.filter (\{ pos } -> second pos /= row)
+
+                ( above, bellow ) =
+                    -- clearedPile |> List.partition (.pos >> second >> (<) row)
+                    clearedPile |> List.partition (\{ pos } -> second pos < row)
+
+                shiftDown el =
+                    { el | pos = ( first el.pos, second el.pos + 1 ) }
+
+                shiftedAbove =
+                    above |> List.map shiftDown
+
+                clearedBellow =
+                    bellow |> List.filter (\{ pos } -> second pos < totalRows)
+            in
+            ( clearedBellow ++ shiftedAbove, linesSoFar + 1 ) |> clearLines
+
+
+scoreLines : Int -> Model -> Int
+scoreLines lines { level } =
+    case lines of
+        1 ->
+            40 * level
+
+        2 ->
+            100 * level
+
+        3 ->
+            300 * level
+
+        4 ->
+            800 * level
+
+        _ ->
+            0
+
+
 
 -- type Direction
 --     = Left
@@ -206,3 +254,25 @@ subscriptions model =
         [ Time.every delta Tick
         , onKeyDown (Decode.map key keyCode)
         ]
+
+
+
+-- TODOS
+-- ** CRITICAL **
+-- new game
+-- pause
+-- game over
+-- stop first tetromino from scoring
+-- framediff sub
+-- hardrop doesnt lock immediately
+-- score harddrop
+-- rotate by the edge
+-- make design responsive
+-- ** NICE TO HAVE **
+-- score back-to-back
+-- animate full row
+-- animate drop after full row clear
+-- animate hard drop
+-- animate TETRIS!
+-- level up animation
+-- sfx

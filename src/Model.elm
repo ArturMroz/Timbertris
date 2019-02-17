@@ -5,8 +5,9 @@ module Model exposing
     , Pos
     , State
     , Tetromino
-    , allTetrominos
-    , clearLines
+    ,  allTetrominos
+       -- , clearLines
+
     , emptyShape
     , findFirstFullRow
     , hardDropped
@@ -20,8 +21,9 @@ module Model exposing
     , palette
     , rotate
     , rotateLocation
-    , s
-    , scoreLines
+    ,  s
+       -- , scoreLines
+
     , shift
     , size
     , t
@@ -278,53 +280,6 @@ findFirstFullRow board =
 
             else
                 findFirstFullRow others
-
-
-clearLines : ( List Block, Int ) -> ( List Block, Int )
-clearLines ( board, linesSoFar ) =
-    case findFirstFullRow board of
-        Nothing ->
-            ( board, linesSoFar )
-
-        Just row ->
-            let
-                clearedPile =
-                    -- board |> List.filter (.pos >> second >> (/=) row)
-                    board |> List.filter (\{ pos } -> second pos /= row)
-
-                ( above, bellow ) =
-                    -- clearedPile |> List.partition (.pos >> second >> (<) row)
-                    clearedPile |> List.partition (\{ pos } -> second pos < row)
-
-                shiftDown el =
-                    { el | pos = ( first el.pos, second el.pos + 1 ) }
-
-                shiftedAbove =
-                    above |> List.map shiftDown
-
-                clearedBellow =
-                    bellow |> List.filter (\{ pos } -> second pos < totalRows)
-            in
-            ( clearedBellow ++ shiftedAbove, linesSoFar + 1 ) |> clearLines
-
-
-scoreLines : Int -> Model -> Int
-scoreLines lines { level } =
-    case lines of
-        1 ->
-            40 * level
-
-        2 ->
-            100 * level
-
-        3 ->
-            300 * level
-
-        4 ->
-            800 * level
-
-        _ ->
-            0
 
 
 isIntersecting : Tetromino -> List Block -> Bool

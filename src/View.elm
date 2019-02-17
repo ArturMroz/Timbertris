@@ -234,24 +234,3 @@ renderProgressBar model =
             ]
             []
         ]
-
-
-
--- TODOS
--- ** CRITICAL **
--- new game
--- pause
--- game over
--- stop first tetromino from scoring
--- framediff sub
--- hardrop doesnt lock immediately
--- score harddrop
--- rotate by the edge
--- make design responsive
--- ** NICE TO HAVE **
--- score back-to-back
--- animate full row
--- animate drop after full row clear
--- animate hard drop
--- level up animation
--- sfx
